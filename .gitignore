@@ -5,3 +5,5 @@ target/
 *.tfstate
 *.backup
 node_modules/
+.vscode/
+

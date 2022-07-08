@@ -4,8 +4,17 @@
  * @author Alibaba Cloud
  */
 
+terraform {
+  required_providers {
+    alicloud = {
+      source  = "aliyun/alicloud"
+      version = "1.174.0"
+    }
+  }
+}
+
 provider "alicloud" {
-  region = "ap-south-1"
+  region = "cn-hangzhou"
 }
 
 
@@ -18,8 +27,8 @@ resource "alicloud_log_project" "basic_log_project" {
 }
 
 resource "alicloud_log_store" "basic_log_store" {
-  project = "${alicloud_log_project.basic_log_project.name}"
-  name = "basic-log-store"
+  project = alicloud_log_project.basic_log_project.name
+  name    = "basic-log-store"
 }
 
 
@@ -28,10 +37,23 @@ resource "alicloud_log_store" "basic_log_store" {
 //
 
 resource "alicloud_ram_role" "basic_service_role" {
-  name = "basic-service-role"
-  services = [
-    "fc.aliyuncs.com"
-  ]
+  name     = "basic-service-role"
+  document = <<EOF
+  {
+    "Statement": [
+      {
+        "Action": "sts:AssumeRole",
+        "Effect": "Allow",
+        "Principal": {
+          "Service": [
+            "fc.aliyuncs.com"
+          ]
+        }
+      }
+    ],
+    "Version": "1"
+  }
+  EOF
 }
 
 data "alicloud_regions" "current" {
@@ -41,40 +63,43 @@ data "alicloud_regions" "current" {
 data "alicloud_account" "current" {}
 
 resource "alicloud_ram_policy" "basic_service_policy" {
-  name = "basic-service-policy"
-
-  statement = [
-    {
-      effect = "Allow"
-      action = [
-        "log:PostLogStoreLogs"
-      ]
-
-      resource = [
-        "acs:log:${data.alicloud_regions.current.regions.0.id}:${data.alicloud_account.current.id}:project/${alicloud_log_project.basic_log_project.name}/logstore/${alicloud_log_store.basic_log_store.name}",
-      ]
-    }
-  ]
+  policy_name     = "basic-service-policy"
+  policy_document = <<EOF
+  {
+    "Statement": [
+      {
+        "Action": [
+          "log:PostLogStoreLogs"
+        ],
+        "Effect": "Allow",
+        "Resource": [
+          "acs:log:${data.alicloud_regions.current.regions.0.id}:${data.alicloud_account.current.id}:project/${alicloud_log_project.basic_log_project.name}/logstore/${alicloud_log_store.basic_log_store.name}"
+        ]
+      }
+    ],
+      "Version": "1"
+  }
+  EOF
 }
 
 resource "alicloud_ram_role_policy_attachment" "basic_policy_attachment" {
-  policy_name = "${alicloud_ram_policy.basic_service_policy.name}"
-  policy_type = "${alicloud_ram_policy.basic_service_policy.type}"
-  role_name = "${alicloud_ram_role.basic_service_role.name}"
+  policy_name = alicloud_ram_policy.basic_service_policy.name
+  policy_type = alicloud_ram_policy.basic_service_policy.type
+  role_name   = alicloud_ram_role.basic_service_role.name
 }
 
 resource "alicloud_fc_service" "basic_service" {
   name = "basic_service"
 
-  role = "${alicloud_ram_role.basic_service_role.arn}"
+  role = alicloud_ram_role.basic_service_role.arn
 
-  log_config = {
-    project = "${alicloud_log_project.basic_log_project.name}"
-    logstore = "${alicloud_log_store.basic_log_store.name}"
+  log_config {
+    project = alicloud_log_project.basic_log_project.name
+    logstore = alicloud_log_store.basic_log_store.name
   }
 
   depends_on = [
-    "alicloud_ram_role_policy_attachment.basic_policy_attachment"
+    alicloud_ram_role_policy_attachment.basic_policy_attachment
   ]
 }
 
@@ -84,9 +109,9 @@ resource "alicloud_fc_service" "basic_service" {
 //
 
 resource "alicloud_fc_function" "basic_function" {
-  service = "${alicloud_fc_service.basic_service.name}"
+  service  = alicloud_fc_service.basic_service.name
   filename = "target/basic.zip"
-  name = "basic"
-  handler = "index.handler"
-  runtime = "nodejs8"
+  name     = "basic"
+  handler  = "index.handler"
+  runtime  = "nodejs8"
 }
